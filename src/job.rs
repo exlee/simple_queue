@@ -12,6 +12,7 @@ pub struct Job {
     pub updated_at: Option<chrono::DateTime<chrono::Utc>>,
     pub attempt: i32,
     pub max_attempts: i32,
+    pub(crate) reprocess_count: i32,
 }
 impl std::fmt::Debug for Job {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
@@ -41,6 +42,7 @@ impl Default for Job {
             updated_at: None,
             attempt: 0,
             max_attempts: 3,
+            reprocess_count: 0,
         }
     }
 }

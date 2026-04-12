@@ -8,7 +8,7 @@ mod job;
 mod queue;
 mod reaper;
 mod result;
-mod sync;
+pub mod sync;
 
 pub mod prelude {
     pub use super::JobHandler;
@@ -39,14 +39,20 @@ impl<T: JobHandler> DynJobHandler for T {
     }
 }
 pub async fn setup(pool: &PgPool) -> Result<(), BoxDynError> {
-    sqlx::migrate!("./migrations")
-        .run(pool.acquire().await?.as_mut())
+    sqlx::raw_sql(include_str!("../migrations/0001_init.sql"))
+        .execute(pool)
         .await?;
     Ok(())
 }
 
-pub async fn start(jq: Arc<Queue>) {
+pub async fn start(jq: Arc<Queue>) -> tokio::task::JoinSet<()> {
+    let mut joinset = tokio::task::JoinSet::new();
     let reaper: reaper::Reaper = jq.reaper().await;
-    let _reaper_h = tokio::spawn(async move { reaper.run().await });
-    let _queue_h = tokio::spawn(async move { jq.run().await });
+    let _reaper_h = joinset.spawn(async move {
+        reaper.run().await;
+    });
+    let _queue_h = joinset.spawn(async move {
+        let _ = jq.run().await;
+    });
+    joinset
 }

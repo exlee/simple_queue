@@ -1,5 +1,10 @@
 use std::sync::Arc;
 
+use crate::{
+    result::{AnyJobResult, JobResultInternal},
+    sync::JobStrategyError,
+};
+
 use super::sync::BackoffStrategy;
 use super::*;
 use dashmap::DashMap;
@@ -7,6 +12,7 @@ use sqlx::{PgPool, error::BoxDynError};
 use tokio::sync::Semaphore;
 use tracing::Instrument as _;
 
+/// Queue engine struct
 pub struct JobsQueue {
     pool: PgPool,
     job_registry: Arc<DashMap<&'static str, Arc<dyn DynJobHandler>>>,
@@ -15,39 +21,37 @@ pub struct JobsQueue {
     queue_semaphores: Arc<DashMap<String, Arc<Semaphore>>>,
     queue_sem_count: usize,
     heartbeat_interval: chrono::Duration,
-    default_backoff_strategy: Arc<BackoffStrategy>,
+    default_backoff_strategy: BackoffStrategy,
     default_queue_strategy: Arc<dyn sync::JobStrategy>,
-    queue_backoff_strategies: Arc<DashMap<String, Arc<BackoffStrategy>>>,
+    queue_backoff_strategies: Arc<DashMap<String, BackoffStrategy>>,
     empty_poll_sleep: chrono::Duration,
+    max_reprocess_count: usize,
 }
 
 // Builder impl
 impl JobsQueue {
-    /// Create new Queue with default configuration:
-    /// - global semaphore with 500 permits
-    /// - queue semaphore with 100 permits
+    /// Creates new Queue with default configuration:
+    /// - global semaphore with 500 permits (global limit)
+    /// - queue semaphore (per queue limit) with 100 permits
+    /// - no custrom semaphore strategy
     /// - heartbeat interval of 5 seconds
-    /// - backoff strategy of exponential backoff
-    /// - pool sleep when empty of 1 second
-    /// Create a new JobsQueue with default configuration:
-    /// - global semaphore with 500 permits
-    /// - queue semaphore with 100 permits
-    /// - heartbeat interval of 5 seconds
-    /// - backoff strategy of exponential backoff
-    /// - pool sleep when empty of 1 second
+    /// - linear backoff strategy with 5s retry interval
+    /// - pool sleep when table is empty of 1 second
+    /// - max reprocess count (poison/loop detection) of 100
     pub fn new(pool: PgPool) -> Self {
         Self {
             pool,
             job_registry: Arc::new(DashMap::new()),
-            global_semaphore: Arc::new(Semaphore::new(500)),
-            default_backoff_strategy: Arc::new(BackoffStrategy::default()),
+            default_backoff_strategy: BackoffStrategy::default(),
             default_queue_strategy: Arc::new(sync::InstantStrategy {}),
             queue_backoff_strategies: Arc::new(DashMap::new()),
+            global_semaphore: Arc::new(Semaphore::new(500)),
             queue_strategies: Arc::new(DashMap::new()),
             queue_semaphores: Arc::new(DashMap::new()),
             queue_sem_count: 100,
             heartbeat_interval: chrono::Duration::seconds(5),
             empty_poll_sleep: chrono::Duration::seconds(1),
+            max_reprocess_count: 100,
         }
     }
     /// Set the global semaphore permits
@@ -58,8 +62,13 @@ impl JobsQueue {
         }
     }
     /// Set the queue strategy for a specific queue
-    pub fn with_queue_strategy(self, queue: String, strategy: Arc<dyn sync::JobStrategy>) -> Self {
-        self.queue_strategies.insert(queue.clone(), strategy);
+    pub fn with_queue_strategy(
+        self,
+        queue: String,
+        strategy: impl sync::JobStrategy + 'static,
+    ) -> Self {
+        self.queue_strategies
+            .insert(queue.clone(), Arc::new(strategy));
         self
     }
     /// Set the semaphore permits for a specific queue
@@ -85,7 +94,7 @@ impl JobsQueue {
     /// Set the default backoff strategy
     pub fn with_default_backoff_strategy(self, strategy: BackoffStrategy) -> Self {
         Self {
-            default_backoff_strategy: Arc::new(strategy),
+            default_backoff_strategy: strategy,
             ..self
         }
     }
@@ -98,8 +107,7 @@ impl JobsQueue {
     }
     /// Set the backoff strategy for a specific queue
     pub fn with_queue_backoff_strategy(self, queue: String, strategy: BackoffStrategy) -> Self {
-        self.queue_backoff_strategies
-            .insert(queue, Arc::new(strategy));
+        self.queue_backoff_strategies.insert(queue, strategy);
         self
     }
 
@@ -107,6 +115,14 @@ impl JobsQueue {
     pub fn with_empty_poll_sleep(self, duration: chrono::Duration) -> Self {
         Self {
             empty_poll_sleep: duration,
+            ..self
+        }
+    }
+    /// Set the maximum number of times a job can be reprocessed
+    /// E.g. rescheduled without attempt consumption or recovered from stalled state (default: 100)
+    pub fn with_max_reprocess_count(self, count: usize) -> Self {
+        Self {
+            max_reprocess_count: count,
             ..self
         }
     }
@@ -175,8 +191,8 @@ impl JobsQueue {
         .await
     }
     fn get_queue_semaphore(&self, queue: String) -> Arc<Semaphore> {
-        let queue_semaphores = self.queue_semaphores.clone();
-        let entry = queue_semaphores
+        let entry = self
+            .queue_semaphores
             .entry(queue)
             .or_insert_with(|| Arc::new(Semaphore::new(self.queue_sem_count)));
         let semaphore = entry.value();
@@ -184,7 +200,7 @@ impl JobsQueue {
     }
     /// Poll the queue for the next job to run (in loop). If no jobs are found, sleep for
     /// `empty_poll_sleep` before retrying.
-    pub async fn run(&self) -> Result<(), BoxDynError> {
+    pub async fn run(self: Arc<Self>) -> Result<(), BoxDynError> {
         loop {
             let _span = tracing::info_span!("poll");
 
@@ -192,7 +208,6 @@ impl JobsQueue {
             let job = self.fetch_next_job().await?;
             if let Some(job) = job {
                 let _job_span = tracing::info_span!("job", id = %job.id, queue = %job.queue);
-                let job = Arc::new(job);
                 let _heartbeat = heartbeat::Heartbeat::start(
                     self.pool.clone(),
                     &job.id,
@@ -226,14 +241,29 @@ impl JobsQueue {
 
                 let backoff_strategy = self
                     .queue_backoff_strategies
-                    .clone()
                     .get(job.queue.as_str())
                     .map(|r| r.value().clone());
                 let backoff_strategy =
                     backoff_strategy.unwrap_or(self.default_backoff_strategy.clone());
 
+                let max_reprocess = self.max_reprocess_count;
+
                 tokio::spawn(async move {
-                    let _permit = strategy.acquire().await;
+                    if job.reprocess_count >= max_reprocess as i32 {
+                        handle_result(
+                            AnyJobResult::Internal(JobResultInternal::BadJob),
+                            &job,
+                            &pool,
+                            &backoff_strategy,
+                        ).await;
+                        return;
+                    }
+                    let permit_result = strategy.acquire(&job).await;
+                    if let Err(permit_err) = permit_result {
+                        handle_strategy_error(permit_err, &job, &pool, &backoff_strategy).await;
+                        return;
+                    };
+                    let _permit = permit_result.unwrap();
                     let result = if let Some(handler) = registry.get(job.queue.as_str()) {
 
                         let process_result = handler.process_dyn(&job)
@@ -250,59 +280,7 @@ impl JobsQueue {
                         JobResult::HandlerMissing
                     };
 
-                    let status_str = result.to_string();
-                    use result::{JobResult, JobResultInternal};
-                    match result {
-                        JobResult::Success => {
-                            let _ = sqlx::query!(
-                                "UPDATE job_queue SET status = $1 WHERE id = $2",
-                                status_str,
-                                job.id.clone(),
-                            )
-                            .execute(&pool.clone())
-                            .await;
-                        }
-                        JobResult::Failed => {
-                            // TODO: Add RetryAt
-                            let _ = sqlx::query!(
-                                "UPDATE job_queue SET status = $1, run_at = $2 WHERE id = $3",
-                                status_str,
-                                backoff_strategy.next_attempt(job.clone()),
-                                job.id.clone(),
-                            )
-                            .execute(&pool.clone())
-                            .await;
-                        }
-                        JobResult::RetryAt(run_at) => {
-                            let _ = sqlx::query!(
-                                "UPDATE job_queue SET status = $1, run_at = $2 WHERE id = $3",
-                                status_str,
-                                run_at,
-                                job.id.clone()
-                            )
-                            .execute(&pool)
-                            .await;
-                        }
-                        JobResult::RescheduleAt(run_at) => {
-                            let _ = sqlx::query!(
-                                "UPDATE job_queue SET status = $1, run_at = $2, attempt = attempt - 1 WHERE id = $3",
-                                status_str, run_at, job.id.clone()
-                            ).execute(&pool).await;
-                        }
-                        JobResult::Critical => {
-                            let _ = update_job(&pool, &job.id, JobResultInternal::Critical).await;
-                        }
-                        JobResult::HandlerMissing => {
-                            let _ = update_job(&pool, &job.id, JobResultInternal::Critical).await;
-                        }
-                        JobResult::Cancel => {
-                            let _ = update_job(&pool, &job.id, JobResultInternal::Cancelled).await;
-                        }
-                        JobResult::Unprocessable => {
-                            let _ =
-                                update_job(&pool, &job.id, JobResultInternal::Unprocessable).await;
-                        }
-                    }
+                    handle_result(AnyJobResult::Public(result), &job, &pool, &backoff_strategy).await;
                     drop(_permit);
                     drop(_queue_permit);
                     drop(_global_permit);
@@ -330,6 +308,131 @@ impl JobsQueue {
     }
 }
 
+async fn handle_strategy_error(
+    err: JobStrategyError,
+    job: &Job,
+    pool: &PgPool,
+    backoff_strategy: &BackoffStrategy,
+) {
+    match err {
+        JobStrategyError::CancelJob => {
+            handle_result(JobResult::Cancel.into(), job, pool, backoff_strategy).await
+        }
+        JobStrategyError::TryAfter(time_delta) => {
+            handle_result(
+                JobResult::RetryAt(chrono::Utc::now() + time_delta).into(),
+                job,
+                pool,
+                backoff_strategy,
+            )
+            .await
+        }
+        JobStrategyError::Retry => {
+            handle_result(JobResult::Failed.into(), job, pool, backoff_strategy).await
+        }
+        JobStrategyError::MarkCompleted => {
+            handle_result(JobResult::Success.into(), job, pool, backoff_strategy).await
+        }
+    }
+}
+
+async fn handle_result(
+    result: AnyJobResult,
+    job: &Job,
+    pool: &PgPool,
+    backoff_strategy: &BackoffStrategy,
+) -> () {
+    match result {
+        AnyJobResult::Internal(result) => {
+            handle_result_internal(result, job, pool, backoff_strategy).await
+        }
+        AnyJobResult::Public(result) => {
+            handle_result_public(result, job, pool, backoff_strategy).await
+        }
+    }
+}
+async fn handle_result_internal(
+    result: JobResultInternal,
+    job: &Job,
+    pool: &PgPool,
+    _backoff_strategy: &BackoffStrategy,
+) -> () {
+    match result {
+        JobResultInternal::BadJob => {
+            // Rest of the variants aren't supported right now, as they should be processed by public result handling
+            let _ = sqlx::query!(
+                "UPDATE job_queue SET status = $1 WHERE id = $2",
+                result.to_string(),
+                &job.id,
+            )
+            .execute(pool)
+            .await;
+        }
+        _ => {
+            tracing::error!("Unexpected internal status in job processing: {:?}", result)
+        }
+    }
+}
+/// Handles JobResult results
+async fn handle_result_public(
+    result: JobResult,
+    job: &Job,
+    pool: &PgPool,
+    backoff_strategy: &BackoffStrategy,
+) -> () {
+    use result::{JobResult, JobResultInternal};
+    let status_str = result.to_string();
+    match result {
+        JobResult::Success => {
+            let _ = sqlx::query!(
+                "UPDATE job_queue SET status = $1 WHERE id = $2",
+                status_str,
+                job.id.clone(),
+            )
+            .execute(pool)
+            .await;
+        }
+        JobResult::Failed => {
+            // TODO: Add RetryAt
+            let _ = sqlx::query!(
+                "UPDATE job_queue SET status = $1, run_at = $2 WHERE id = $3",
+                status_str,
+                backoff_strategy.next_attempt(job),
+                job.id.clone(),
+            )
+            .execute(pool)
+            .await;
+        }
+        JobResult::RetryAt(run_at) => {
+            let _ = sqlx::query!(
+                "UPDATE job_queue SET status = $1, run_at = $2 WHERE id = $3",
+                status_str,
+                run_at,
+                job.id.clone()
+            )
+            .execute(pool)
+            .await;
+        }
+        JobResult::RescheduleAt(run_at) => {
+            let _ = sqlx::query!(
+                "UPDATE job_queue SET status = $1, run_at = $2, attempt = attempt - 1, reprocess_count = reprocess_count + 1 WHERE id = $3",
+                status_str, run_at, job.id.clone()
+            ).execute(pool).await;
+        }
+        JobResult::Critical => {
+            let _ = update_job(&pool, &job.id, JobResultInternal::Critical).await;
+        }
+        JobResult::HandlerMissing => {
+            let _ = update_job(&pool, &job.id, JobResultInternal::Critical).await;
+        }
+        JobResult::Cancel => {
+            let _ = update_job(&pool, &job.id, JobResultInternal::Cancelled).await;
+        }
+        JobResult::Unprocessable => {
+            let _ = update_job(&pool, &job.id, JobResultInternal::Unprocessable).await;
+        }
+    }
+}
 // Main loop
 impl JobsQueue {
     /// Return a reaper instance that fixes stale jobs

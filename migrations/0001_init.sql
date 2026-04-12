@@ -11,7 +11,8 @@ CREATE TABLE IF NOT EXISTS job_queue
     run_at TIMESTAMPTZ,
     updated_at TIMESTAMPTZ,
     attempt INT NOT NULL DEFAULT 0,
-    max_attempts INT NOT NULL DEFAULT 3
+    max_attempts INT NOT NULL DEFAULT 3,
+    reprocess_count INT NOT NULL DEFAULT 0
 );
 
 CREATE UNIQUE INDEX IF NOT EXISTS idx_job_queue_unique_active

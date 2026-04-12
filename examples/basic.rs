@@ -1,3 +1,5 @@
+use std::sync::Arc;
+
 use simple_queue::prelude::*;
 use sqlx::{PgPool, error::BoxDynError};
 
@@ -23,5 +25,7 @@ pub async fn main() {
     //jq.register_handler("normal-queue2", j2);
     jq.insert_job(job).await.unwrap();
     jq.insert_job(job2).await.unwrap();
+    let jq = Arc::new(jq);
+
     jq.run().await.unwrap();
 }
