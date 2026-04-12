@@ -1,0 +1,14 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "\n            UPDATE job_queue\n            SET status = 'cancelled'\n            WHERE unique_key = $1\n            ",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Text"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "827dca36ac113e12f18980e1fa4aa39c2e45be399ba7b03b3437ac124e5d4429"
+}
