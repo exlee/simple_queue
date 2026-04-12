@@ -16,6 +16,7 @@ pub async fn spawn_queue_with(pool: &PgPool, config_fn: impl FnOnce(Queue) -> Qu
     queue
 }
 
+#[allow(dead_code)]
 pub async fn spawn_queue(pool: &PgPool) -> Arc<Queue> {
     let default_queue = |queue: Queue| {
         queue
@@ -23,8 +24,8 @@ pub async fn spawn_queue(pool: &PgPool) -> Arc<Queue> {
                 delay: chrono::Duration::milliseconds(100),
             })
             .with_max_reprocess_count(10)
-            .with_empty_poll_sleep(chrono::Duration::milliseconds(100))
-            .with_heartbeat_interval(chrono::Duration::milliseconds(500))
+            .with_empty_poll_sleep(tokio::time::Duration::from_millis(100))
+            .with_heartbeat_interval(tokio::time::Duration::from_millis(500))
     };
     return spawn_queue_with(pool, default_queue).await;
 }

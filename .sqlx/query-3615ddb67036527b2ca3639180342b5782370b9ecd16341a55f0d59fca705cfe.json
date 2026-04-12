@@ -1,0 +1,89 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "\n        UPDATE job_queue\n        SET\n            status = $2,\n            attempt = attempt + 1\n\n        WHERE id = (\n            SELECT id FROM job_queue\n            WHERE status = $1\n            AND (CURRENT_TIMESTAMP > run_at OR run_at IS NULL)\n            AND attempt < max_attempts\n            FOR UPDATE SKIP LOCKED\n            LIMIT 1\n        )\n        RETURNING *\n        ",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "id",
+        "type_info": "Uuid"
+      },
+      {
+        "ordinal": 1,
+        "name": "fingerprint",
+        "type_info": "Text"
+      },
+      {
+        "ordinal": 2,
+        "name": "unique_key",
+        "type_info": "Text"
+      },
+      {
+        "ordinal": 3,
+        "name": "queue",
+        "type_info": "Varchar"
+      },
+      {
+        "ordinal": 4,
+        "name": "job_data",
+        "type_info": "Jsonb"
+      },
+      {
+        "ordinal": 5,
+        "name": "status",
+        "type_info": "Varchar"
+      },
+      {
+        "ordinal": 6,
+        "name": "created_at",
+        "type_info": "Timestamptz"
+      },
+      {
+        "ordinal": 7,
+        "name": "run_at",
+        "type_info": "Timestamptz"
+      },
+      {
+        "ordinal": 8,
+        "name": "updated_at",
+        "type_info": "Timestamptz"
+      },
+      {
+        "ordinal": 9,
+        "name": "attempt",
+        "type_info": "Int4"
+      },
+      {
+        "ordinal": 10,
+        "name": "max_attempts",
+        "type_info": "Int4"
+      },
+      {
+        "ordinal": 11,
+        "name": "reprocess_count",
+        "type_info": "Int4"
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Text",
+        "Varchar"
+      ]
+    },
+    "nullable": [
+      false,
+      true,
+      true,
+      false,
+      true,
+      false,
+      false,
+      true,
+      true,
+      false,
+      false,
+      false
+    ]
+  },
+  "hash": "3615ddb67036527b2ca3639180342b5782370b9ecd16341a55f0d59fca705cfe"
+}

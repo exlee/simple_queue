@@ -19,9 +19,9 @@ pub enum JobResult {
     /// Handler can't process the job (e.g. deserialization failures), status changes to unprocessable
     Unprocessable,
 }
-impl std::fmt::Display for JobResult {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        let internal = match self {
+impl JobResult {
+    pub(crate) fn handle(&self) -> JobResultInternal {
+        match self {
             JobResult::Success => JobResultInternal::Completed,
             JobResult::Failed => JobResultInternal::Pending,
             JobResult::RetryAt(_) => JobResultInternal::Pending,
@@ -30,8 +30,7 @@ impl std::fmt::Display for JobResult {
             JobResult::Unprocessable => JobResultInternal::Unprocessable,
             JobResult::Critical => JobResultInternal::Critical,
             JobResult::Cancel => JobResultInternal::Cancelled,
-        };
-        write!(f, "{}", internal)
+        }
     }
 }
 

@@ -4,6 +4,7 @@ use sqlx::PgPool;
 use tracing;
 
 mod heartbeat;
+mod janitor;
 mod job;
 mod queue;
 mod reaper;
@@ -39,7 +40,7 @@ impl<T: JobHandler> DynJobHandler for T {
     }
 }
 pub async fn setup(pool: &PgPool) -> Result<(), BoxDynError> {
-    sqlx::raw_sql(include_str!("../migrations/0001_init.sql"))
+    sqlx::raw_sql(include_str!("../migrations/0001_queue_init.sql"))
         .execute(pool)
         .await?;
     Ok(())
@@ -47,9 +48,13 @@ pub async fn setup(pool: &PgPool) -> Result<(), BoxDynError> {
 
 pub async fn start(jq: Arc<Queue>) -> tokio::task::JoinSet<()> {
     let mut joinset = tokio::task::JoinSet::new();
-    let reaper: reaper::Reaper = jq.reaper().await;
+    let mut reaper: reaper::Reaper = jq.reaper().await;
+    let mut janitor: janitor::Janitor = jq.janitor().await;
     let _reaper_h = joinset.spawn(async move {
         reaper.run().await;
+    });
+    let _janitor_h = joinset.spawn(async move {
+        janitor.run().await;
     });
     let _queue_h = joinset.spawn(async move {
         let _ = jq.run().await;

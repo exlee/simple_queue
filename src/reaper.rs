@@ -4,24 +4,21 @@ use super::*;
 use result::JobResultInternal;
 
 pub struct Reaper {
-    pub heartbeat_interval: chrono::TimeDelta,
+    pub heartbeat_interval: tokio::time::Interval,
     pub pool: PgPool,
 }
 
 impl Reaper {
-    pub async fn run(&self) {
+    pub async fn run(&mut self) {
         loop {
+            self.heartbeat_interval.tick().await;
             self.run_reaper().await.ok();
-            tokio::time::sleep(tokio::time::Duration::from_millis(
-                self.heartbeat_interval.num_milliseconds().abs() as u64,
-            ))
-            .await;
         }
     }
 
     fn stale_job_interval(&self) -> chrono::TimeDelta {
         chrono::TimeDelta::milliseconds(
-            (self.heartbeat_interval.num_milliseconds() as f32 * 2.5f32) as i64,
+            (self.heartbeat_interval.period().as_millis() as f32 * 2.5f32) as i64,
         )
     }
     #[tracing::instrument(skip(self))]

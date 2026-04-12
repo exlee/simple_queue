@@ -1,0 +1,22 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "\n            WITH moved AS (\n              DELETE FROM job_queue\n              WHERE status = $1\n              RETURNING *\n            )\n            INSERT INTO job_queue_archive SELECT * FROM moved\n            RETURNING id;\n            ",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "id",
+        "type_info": "Uuid"
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Text"
+      ]
+    },
+    "nullable": [
+      false
+    ]
+  },
+  "hash": "67f88d3cca9345852edef6c404475aecb7f9f1ad94643332536cc7621462e3b8"
+}

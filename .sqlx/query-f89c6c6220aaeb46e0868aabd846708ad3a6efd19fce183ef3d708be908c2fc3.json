@@ -1,0 +1,23 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "\n            UPDATE job_queue\n            SET status = $1, updated_at = CURRENT_TIMESTAMP\n            WHERE status = $2\n            AND attempt >= max_attempts\n            RETURNING id\n            ",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "id",
+        "type_info": "Uuid"
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Varchar",
+        "Text"
+      ]
+    },
+    "nullable": [
+      false
+    ]
+  },
+  "hash": "f89c6c6220aaeb46e0868aabd846708ad3a6efd19fce183ef3d708be908c2fc3"
+}

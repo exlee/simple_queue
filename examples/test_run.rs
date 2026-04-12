@@ -31,7 +31,7 @@ pub async fn main() {
     simple_queue::setup(&pool).await.unwrap();
 
     let queue = Arc::new(
-        Queue::new(pool.clone()).with_heartbeat_interval(chrono::TimeDelta::milliseconds(100)),
+        Queue::new(pool.clone()).with_heartbeat_interval(tokio::time::Duration::from_millis(100)),
     );
 
     // Register the job handler

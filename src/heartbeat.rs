@@ -7,13 +7,15 @@ pub(crate) struct Heartbeat {
 }
 
 impl Heartbeat {
-    pub(crate) fn start(pool: PgPool, job_id: &uuid::Uuid, interval: ::chrono::Duration) -> Self {
+    pub(crate) fn start(
+        pool: PgPool,
+        job_id: &uuid::Uuid,
+        heartbeat_delta: ::tokio::time::Duration,
+    ) -> Self {
+        let heartbeat_interval = tokio::time::interval(heartbeat_delta);
         let _span = tracing::info_span!("heartbeat", job_id = %job_id);
         let job_id = job_id.clone();
         let handle = tokio::spawn(async move {
-            let heartbeat_interval = tokio::time::interval(tokio::time::Duration::from_millis(
-                interval.num_milliseconds().abs() as u64,
-            ));
             tokio::pin!(heartbeat_interval);
 
             loop {
