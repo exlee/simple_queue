@@ -1,6 +1,9 @@
 use sqlx::PgPool;
 use tracing::Instrument as _;
 
+/// Heartbeat is a background task that periodically updates the job's updated_at timestamp.
+///
+/// By deafult it is started the moment job's status changes to `running` and lives until the job processing finishes.
 pub(crate) struct Heartbeat {
     handle: tokio::task::JoinHandle<()>,
     _span: tracing::Span,
@@ -14,7 +17,7 @@ impl Heartbeat {
     ) -> Self {
         let heartbeat_interval = tokio::time::interval(heartbeat_delta);
         let _span = tracing::info_span!("heartbeat", job_id = %job_id);
-        let job_id = job_id.clone();
+        let job_id = *job_id;
         let handle = tokio::spawn(async move {
             tokio::pin!(heartbeat_interval);
 

@@ -3,12 +3,18 @@ use sqlx::{PgPool, error::BoxDynError};
 use super::*;
 use result::JobResultInternal;
 
+/// Reaper is a background task that fixes stale jobs.
+///
+/// It periodically runs and:
+/// - Check for stale jobs (not updated for some time but status = `running`)
+/// - Marks jobs as failed when their attempt count exceeds the maximum allowed
 pub struct Reaper {
     pub heartbeat_interval: tokio::time::Interval,
     pub pool: PgPool,
 }
 
 impl Reaper {
+    /// Runs the reaper loop.
     pub async fn run(&mut self) {
         loop {
             self.heartbeat_interval.tick().await;

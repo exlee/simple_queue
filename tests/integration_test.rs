@@ -6,57 +6,57 @@ use sqlx::PgPool;
 use std::time::Duration;
 
 struct SuccessHandler;
-impl JobHandler for SuccessHandler {
+impl Handler for SuccessHandler {
     const QUEUE: &'static str = "test-success";
-    async fn process(&self, _job: &Job) -> Result<JobResult, BoxDynError> {
+    async fn process(&self, _queue: &SimpleQueue, _job: &Job) -> Result<JobResult, BoxDynError> {
         Ok(JobResult::Success)
     }
 }
 
 struct FailHandler;
-impl JobHandler for FailHandler {
+impl Handler for FailHandler {
     const QUEUE: &'static str = "test-fail";
-    async fn process(&self, _job: &Job) -> Result<JobResult, BoxDynError> {
+    async fn process(&self, _queue: &SimpleQueue, _job: &Job) -> Result<JobResult, BoxDynError> {
         Ok(JobResult::Failed)
     }
 }
 
 struct MaxAttemptsFailHandler;
-impl JobHandler for MaxAttemptsFailHandler {
+impl Handler for MaxAttemptsFailHandler {
     const QUEUE: &'static str = "test-max-attempts-fail";
-    async fn process(&self, _job: &Job) -> Result<JobResult, BoxDynError> {
+    async fn process(&self, _queue: &SimpleQueue, _job: &Job) -> Result<JobResult, BoxDynError> {
         Ok(JobResult::Failed)
     }
 }
 
 struct CancelHandler;
-impl JobHandler for CancelHandler {
+impl Handler for CancelHandler {
     const QUEUE: &'static str = "test-cancel";
-    async fn process(&self, _job: &Job) -> Result<JobResult, BoxDynError> {
+    async fn process(&self, _queue: &SimpleQueue, _job: &Job) -> Result<JobResult, BoxDynError> {
         Ok(JobResult::Cancel)
     }
 }
 
 struct CriticalHandler;
-impl JobHandler for CriticalHandler {
+impl Handler for CriticalHandler {
     const QUEUE: &'static str = "test-critical";
-    async fn process(&self, _job: &Job) -> Result<JobResult, BoxDynError> {
+    async fn process(&self, _queue: &SimpleQueue, _job: &Job) -> Result<JobResult, BoxDynError> {
         Ok(JobResult::Critical)
     }
 }
 
 struct UnprocessableHandler;
-impl JobHandler for UnprocessableHandler {
+impl Handler for UnprocessableHandler {
     const QUEUE: &'static str = "test-unprocessable";
-    async fn process(&self, _job: &Job) -> Result<JobResult, BoxDynError> {
+    async fn process(&self, _queue: &SimpleQueue, _job: &Job) -> Result<JobResult, BoxDynError> {
         Ok(JobResult::Unprocessable)
     }
 }
 
 struct RetryAtHandler;
-impl JobHandler for RetryAtHandler {
+impl Handler for RetryAtHandler {
     const QUEUE: &'static str = "test-retry-at";
-    async fn process(&self, _job: &Job) -> Result<JobResult, BoxDynError> {
+    async fn process(&self, _queue: &SimpleQueue, _job: &Job) -> Result<JobResult, BoxDynError> {
         Ok(JobResult::RetryAt(
             chrono::Utc::now() + chrono::Duration::seconds(5),
         ))
@@ -64,18 +64,18 @@ impl JobHandler for RetryAtHandler {
 }
 
 struct RescheduleHandler;
-impl JobHandler for RescheduleHandler {
+impl Handler for RescheduleHandler {
     const QUEUE: &'static str = "test-reschedule";
-    async fn process(&self, _job: &Job) -> Result<JobResult, BoxDynError> {
+    async fn process(&self, _queue: &SimpleQueue, _job: &Job) -> Result<JobResult, BoxDynError> {
         Ok(JobResult::RescheduleAt(
             chrono::Utc::now() + chrono::Duration::seconds(5),
         ))
     }
 }
 struct RescheduleImmediateHandler;
-impl JobHandler for RescheduleImmediateHandler {
+impl Handler for RescheduleImmediateHandler {
     const QUEUE: &'static str = "test-reschedule-immediate";
-    async fn process(&self, _job: &Job) -> Result<JobResult, BoxDynError> {
+    async fn process(&self, _queue: &SimpleQueue, _job: &Job) -> Result<JobResult, BoxDynError> {
         Ok(JobResult::RescheduleAt(
             chrono::Utc::now() + chrono::Duration::milliseconds(10),
         ))
@@ -83,9 +83,9 @@ impl JobHandler for RescheduleImmediateHandler {
 }
 
 struct WorkHandler;
-impl JobHandler for WorkHandler {
+impl Handler for WorkHandler {
     const QUEUE: &'static str = "test-work";
-    async fn process(&self, _job: &Job) -> Result<JobResult, BoxDynError> {
+    async fn process(&self, _queue: &SimpleQueue, _job: &Job) -> Result<JobResult, BoxDynError> {
         tokio::time::sleep(Duration::from_millis(10)).await;
         Ok(JobResult::Success)
     }
@@ -135,6 +135,29 @@ async fn wait_for_count(
         tokio::time::sleep(Duration::from_millis(50)).await;
     }
     Err(format!("Timeout waiting for count {}", expected))
+}
+async fn wait_for_at_least(
+    pool: &PgPool,
+    query: &str,
+    expected: i64,
+    timeout_secs: u64,
+) -> Result<i64, String> {
+    let deadline = std::time::Instant::now() + Duration::from_secs(timeout_secs);
+    let mut last_count = 0;
+    while std::time::Instant::now() < deadline {
+        let result: Result<(i64,), _> = sqlx::query_as(query).fetch_one(pool).await;
+        if let Ok((count,)) = result {
+            last_count = count;
+            if count >= expected {
+                return Ok(count);
+            }
+        }
+        tokio::time::sleep(Duration::from_millis(50)).await;
+    }
+    Err(format!(
+        "Timeout waiting for count {} - got {}",
+        expected, last_count
+    ))
 }
 
 #[tokio::test(flavor = "multi_thread")]
@@ -447,9 +470,13 @@ async fn test_queue_isolation() {
 
     // Register slow handler with semaphore limit of 10
     struct SlowHandler;
-    impl JobHandler for SlowHandler {
+    impl Handler for SlowHandler {
         const QUEUE: &'static str = "slow-queue";
-        async fn process(&self, _job: &Job) -> Result<JobResult, BoxDynError> {
+        async fn process(
+            &self,
+            _queue: &SimpleQueue,
+            _job: &Job,
+        ) -> Result<JobResult, BoxDynError> {
             // Simulate slow work
             tokio::time::sleep(Duration::from_millis(500)).await;
             Ok(JobResult::Success)
@@ -458,9 +485,13 @@ async fn test_queue_isolation() {
 
     // Register fast handler
     struct FastHandler;
-    impl JobHandler for FastHandler {
+    impl Handler for FastHandler {
         const QUEUE: &'static str = "fast-queue";
-        async fn process(&self, _job: &Job) -> Result<JobResult, BoxDynError> {
+        async fn process(
+            &self,
+            _queue: &SimpleQueue,
+            _job: &Job,
+        ) -> Result<JobResult, BoxDynError> {
             // Simulate fast work
             tokio::time::sleep(Duration::from_millis(10)).await;
             Ok(JobResult::Success)
@@ -470,38 +501,40 @@ async fn test_queue_isolation() {
     queue.register_handler(SlowHandler);
     queue.register_handler(FastHandler);
 
-    let handle = {
-        let queue = queue.clone();
-        // Add many jobs to slow queue (exceeding semaphore limit)
-
+    let qc = queue.clone();
+    let _ = tokio::spawn(async move {
+        let queue = qc;
+        let qc = queue.clone();
         tokio::spawn(async move {
             for i in 0..1000 {
-                queue
-                    .insert_job(Job::new("slow-queue", serde_json::json!({"index": i})))
+                qc.insert_job(Job::new("slow-queue", serde_json::json!({"index": i})))
                     .await
                     .unwrap();
             }
+        });
 
+        let qc = queue.clone();
+        tokio::spawn(async move {
             // Add few jobs to fast queue
             for i in 0..500 {
-                queue
-                    .insert_job(Job::new("fast-queue", serde_json::json!({"index": i})))
+                qc.insert_job(Job::new("fast-queue", serde_json::json!({"index": i})))
                     .await
                     .unwrap();
             }
-        })
-        .abort_handle()
-    };
+        });
+    })
+    .await;
+    tracing::info!("waiting for fast-queue count");
     // Wait for fast queue jobs to complete
-    let result = wait_for_count(
+    let result = wait_for_at_least(
         &ctx.pool,
         "SELECT COUNT(*) FROM job_queue WHERE status = 'completed' AND queue = 'fast-queue'",
         500,
-        1000,
+        5,
     )
     .await;
 
-    handle.abort();
+    //handle.abort();
     assert_eq!(result.unwrap(), 500);
 
     // Verify slow queue jobs are still processing (not blocked by fast queue)

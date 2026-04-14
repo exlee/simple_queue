@@ -1,0 +1,6 @@
+[advisories]
+ignore = [
+    # MySQL dependency, pulled by SQLX by its own, not used
+    "RUSTSEC-2023-0071",
+    # Unsound with a custom logger, also sqlx
+    "RUSTSEC-2026-0097"]

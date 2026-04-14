@@ -1,12 +1,15 @@
 use std::sync::{Arc, OnceLock};
 
-use simple_queue::Queue;
+use simple_queue::SimpleQueue;
 use sqlx::{PgPool, postgres::PgPoolOptions};
 
 const DB_URL: &str = "postgres://postgres@localhost:5432/simple_queue";
 
-pub async fn spawn_queue_with(pool: &PgPool, config_fn: impl FnOnce(Queue) -> Queue) -> Arc<Queue> {
-    let queue = Arc::new(config_fn(Queue::new(pool.clone())));
+pub async fn spawn_queue_with(
+    pool: &PgPool,
+    config_fn: impl FnOnce(SimpleQueue) -> SimpleQueue,
+) -> Arc<SimpleQueue> {
+    let queue = Arc::new(config_fn(SimpleQueue::new(pool.clone())));
     let queue2 = queue.clone();
     tokio::spawn(async move {
         let joinset = simple_queue::start(queue2.clone()).await;
@@ -17,8 +20,8 @@ pub async fn spawn_queue_with(pool: &PgPool, config_fn: impl FnOnce(Queue) -> Qu
 }
 
 #[allow(dead_code)]
-pub async fn spawn_queue(pool: &PgPool) -> Arc<Queue> {
-    let default_queue = |queue: Queue| {
+pub async fn spawn_queue(pool: &PgPool) -> Arc<SimpleQueue> {
+    let default_queue = |queue: SimpleQueue| {
         queue
             .with_default_backoff_strategy(simple_queue::sync::BackoffStrategy::Linear {
                 delay: chrono::Duration::milliseconds(100),
@@ -76,8 +79,8 @@ impl TestContext {
     }
 }
 
-static TRACING: OnceLock<()> = OnceLock::new();
 pub fn init_tracing() {
+    static TRACING: OnceLock<()> = OnceLock::new();
     TRACING.get_or_init(|| {
         tracing_subscriber::fmt()
             .with_env_filter(tracing_subscriber::EnvFilter::from_default_env())
