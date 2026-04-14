@@ -1,23 +1,26 @@
 pub enum JobResult {
-    /// Job processed successfully
+    /// Job processed successfully.
     Success,
-    /// Job failed, subject to retry (with BackoffStrategy)
+    /// Job failed, subject to retry (with BackoffStrategy).
     Failed,
-    /// Retry (i.e. attempt count incremented) at a specific time
+    /// Retry (i.e. attempt count incremented) at a specific time.
     /// IMPORTANT: Job cannot be retried sooner than the backoff strategy allows
     RetryAt(chrono::DateTime<chrono::Utc>),
-    /// Reschedule (i.e. attempt count not incremented) at a specific time
-    /// USE WITH CAUTION: Can lead to infinite retry loops
-    /// Queue's max_reprocess_count is a safety measure to prevent infinite rescheduling
+    /// Reschedule to specific time.
+    /// Attempt it NOT consumed. Use with caution.
+    /// Queue's max_reprocess_count is a safety measure to prevent infinite rescheduling.
     RescheduleAt(chrono::DateTime<chrono::Utc>),
-    /// Handler not found for the job type, status changes to unprocessable
+    /// Handler not found for the job type, status changes to unprocessable.
     HandlerMissing,
-    /// Critical failure, job is not retried
+    /// Critical failure, job is not retried.
     Critical,
-    /// Cancel the job (i.e. do not retry anymore), status changes to cancelled
+    /// Cancel the job (i.e. do not retry anymore), status changes to cancelled.
     Cancel,
-    /// Handler can't process the job (e.g. deserialization failures), status changes to unprocessable
+    /// Handler can't process the job (e.g. deserialization failures), status changes to unprocessable.
     Unprocessable,
+    /// Internal error, same as Failed but looks nicer when handler encountered recoverable error.
+    /// Attempt is consumed.
+    InternalError,
 }
 impl JobResult {
     pub(crate) fn handle(&self) -> JobResultInternal {
@@ -26,6 +29,7 @@ impl JobResult {
             JobResult::Failed => JobResultInternal::Pending,
             JobResult::RetryAt(_) => JobResultInternal::Pending,
             JobResult::RescheduleAt(_) => JobResultInternal::Pending,
+            JobResult::InternalError => JobResultInternal::Pending,
             JobResult::HandlerMissing => JobResultInternal::Unprocessable,
             JobResult::Unprocessable => JobResultInternal::Unprocessable,
             JobResult::Critical => JobResultInternal::Critical,

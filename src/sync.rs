@@ -32,11 +32,15 @@ pub enum JobStrategyError {
 
 /// Trait for job strategies that define how to acquire final, 3rd permit
 pub trait JobStrategy: Send + Sync {
-    fn acquire(&self, job: &Job) -> BoxFuture<'_, Result<Permit, JobStrategyError>>;
+    fn acquire(&self, job: &Job)
+    -> crate::handler::BoxFuture<'_, Result<Permit, JobStrategyError>>;
 }
 pub struct InstantStrategy {}
 impl JobStrategy for InstantStrategy {
-    fn acquire(&self, _job: &Job) -> BoxFuture<'_, Result<Permit, JobStrategyError>> {
+    fn acquire(
+        &self,
+        _job: &Job,
+    ) -> crate::handler::BoxFuture<'_, Result<Permit, JobStrategyError>> {
         Box::pin(async move { Ok(Permit::new(())) })
     }
 }

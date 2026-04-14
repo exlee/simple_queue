@@ -1,3 +1,5 @@
+#![cfg(feature = "janitor")]
+
 mod setup;
 use setup::*;
 use simple_queue::prelude::*;
@@ -37,7 +39,7 @@ async fn count_in(pool: &sqlx::PgPool, table: &str, id: uuid::Uuid) -> i64 {
 
 /// Spawn a queue with an unreachably long janitor interval so the background
 /// janitor task never fires during a test – we call the methods manually.
-async fn spawn_queue_no_janitor(pool: &sqlx::PgPool) -> std::sync::Arc<Queue> {
+async fn spawn_queue_no_janitor(pool: &sqlx::PgPool) -> std::sync::Arc<SimpleQueue> {
     spawn_queue_with(pool, |q| {
         q.with_janitor_interval(tokio::time::Duration::from_secs(3600))
             .with_empty_poll_sleep(tokio::time::Duration::from_millis(100))
@@ -208,7 +210,7 @@ async fn test_dlq_moves_all_terminal_statuses() {
 #[tokio::test(flavor = "multi_thread")]
 async fn test_dlq_ignores_running_and_completed() {
     let ctx = TestContext::new().await;
-    let queue = spawn_queue_no_janitor(&ctx.pool).await;
+    let queue = spawn_queue(&ctx.pool).await;
 
     let ignored_statuses = ["running", "completed"];
 
@@ -378,37 +380,36 @@ async fn test_full_janitor_cycle_moves_correct_jobs() {
 // ---------------------------------------------------------------------------
 
 struct SuccessHandler;
-impl JobHandler for SuccessHandler {
+impl Handler for SuccessHandler {
     const QUEUE: &'static str = "janitor-e2e-success";
-    async fn process(&self, _job: &Job) -> Result<JobResult, BoxDynError> {
+    async fn process(&self, _queue: &SimpleQueue, _job: &Job) -> Result<JobResult, BoxDynError> {
         Ok(JobResult::Success)
     }
 }
 
 struct CancelHandler;
-impl JobHandler for CancelHandler {
+impl Handler for CancelHandler {
     const QUEUE: &'static str = "janitor-e2e-cancel";
-    async fn process(&self, _job: &Job) -> Result<JobResult, BoxDynError> {
+    async fn process(&self, _queue: &SimpleQueue, _job: &Job) -> Result<JobResult, BoxDynError> {
         Ok(JobResult::Cancel)
     }
 }
 
 struct CriticalHandler;
-impl JobHandler for CriticalHandler {
+impl Handler for CriticalHandler {
     const QUEUE: &'static str = "janitor-e2e-critical";
-    async fn process(&self, _job: &Job) -> Result<JobResult, BoxDynError> {
+    async fn process(&self, _queue: &SimpleQueue, _job: &Job) -> Result<JobResult, BoxDynError> {
         Ok(JobResult::Critical)
     }
 }
 
 struct UnprocessableHandler;
-impl JobHandler for UnprocessableHandler {
+impl Handler for UnprocessableHandler {
     const QUEUE: &'static str = "janitor-e2e-unprocessable";
-    async fn process(&self, _job: &Job) -> Result<JobResult, BoxDynError> {
+    async fn process(&self, _queue: &SimpleQueue, _job: &Job) -> Result<JobResult, BoxDynError> {
         Ok(JobResult::Unprocessable)
     }
 }
-
 /// Wait until a job lands in job_queue_archive (i.e. after janitor sweeps it).
 async fn wait_for_archive(
     pool: &sqlx::PgPool,

@@ -6,10 +6,10 @@ pub struct ProducerHandler {
     producer_id: usize,
 }
 
-impl JobHandler for ProducerHandler {
+impl Handler for ProducerHandler {
     const QUEUE: &'static str = "producer-queue";
 
-    async fn process(&self, job: &Job) -> Result<JobResult, BoxDynError> {
+    async fn process(&self, _queue: &SimpleQueue, job: &Job) -> Result<JobResult, BoxDynError> {
         let data: serde_json::Value = job.job_data.clone();
         println!(
             "Producer {} processed job {:?}: {:?}",
@@ -31,7 +31,8 @@ pub async fn main() {
     simple_queue::setup(&pool).await.unwrap();
 
     let queue = Arc::new(
-        Queue::new(pool.clone()).with_heartbeat_interval(tokio::time::Duration::from_millis(100)),
+        SimpleQueue::new(pool.clone())
+            .with_heartbeat_interval(tokio::time::Duration::from_millis(100)),
     );
 
     // Register the job handler
@@ -42,7 +43,7 @@ pub async fn main() {
     let queue_handle = tokio::spawn({
         let q = queue.clone();
         async move {
-            q.run().await.unwrap();
+            q.run(None).await.unwrap();
         }
     });
 

@@ -2,11 +2,27 @@
 name = "simple-queue"
 version = "0.1.0"
 edition = "2024"
+license = "MIT"
+description = "A simple persistent queue implementation in Rust backed by PostgreSQL and tokio"
+keywords = ["persistent_queue", "queue", "postgres", "tokio"]
+categories = ["concurrency", "asynchronous"]
+repository = "https://github.com/exlee/simple_queue"
+rust-version = "1.88.0"
+readme = "README.md"
+
+[features]
+default = ["janitor"]
+janitor = []
+
+[package.metadata.docs.rs]
+all-features = true
+rustdoc-args = ["--cfg", "docsrs", "--no-deps"]
 
 [dependencies]
 anyhow = "1.0.102"
 chrono = { version = "0.4.44", features = ["serde"] }
 dashmap = "6.1.0"
+futures = "0.3.32"
 serde = "1.0.228"
 serde_json = "1.0.149"
 sqlx = { version = "0.8.6", features = ["chrono", "postgres", "sqlx-postgres", "uuid", "runtime-tokio"] }
