@@ -162,13 +162,12 @@ async fn wait_for_at_least(
 
 #[tokio::test(flavor = "multi_thread")]
 async fn test_job_creation() {
-    let ctx = TestContext::new().await;
+    let _ctx = TestContext::new().await;
     let job = Job::new("test", serde_json::json!({"key": "value"}));
     assert_eq!(job.queue, "test");
     assert_eq!(job.status, "pending");
     assert_eq!(job.attempt, 0);
     assert_eq!(job.max_attempts, 3);
-    ctx.cleanup().await;
 }
 
 #[tokio::test(flavor = "multi_thread")]
@@ -182,7 +181,6 @@ async fn test_insert_and_process_success() {
         .unwrap();
     let result = wait_for_status(&ctx.pool, "test-success", "completed", 5).await;
     assert_eq!(result.unwrap(), "completed");
-    ctx.cleanup().await;
 }
 
 #[tokio::test(flavor = "multi_thread")]
@@ -196,7 +194,6 @@ async fn test_cancel_result() {
         .unwrap();
     let result = wait_for_status(&ctx.pool, "test-cancel", "cancelled", 5).await;
     assert_eq!(result.unwrap(), "cancelled");
-    ctx.cleanup().await;
 }
 
 #[tokio::test(flavor = "multi_thread")]
@@ -211,7 +208,6 @@ async fn test_failed_result() {
     let result = wait_for_status(&ctx.pool, "test-fail", "pending", 5).await;
     // Failed jobs become pending with a future run_at (retry mechanism)
     assert_eq!(result.unwrap(), "pending");
-    ctx.cleanup().await;
 }
 
 #[tokio::test(flavor = "multi_thread")]
@@ -225,7 +221,6 @@ async fn test_critical_result() {
         .unwrap();
     let result = wait_for_status(&ctx.pool, "test-critical", "critical_failure", 5).await;
     assert_eq!(result.unwrap(), "critical_failure");
-    ctx.cleanup().await;
 }
 
 #[tokio::test(flavor = "multi_thread")]
@@ -239,7 +234,6 @@ async fn test_unprocessable_result() {
         .unwrap();
     let result = wait_for_status(&ctx.pool, "test-unprocessable", "unprocessable", 5).await;
     assert_eq!(result.unwrap(), "unprocessable");
-    ctx.cleanup().await;
 }
 
 #[tokio::test(flavor = "multi_thread")]
@@ -268,7 +262,6 @@ async fn test_retry_at_result() {
         tokio::time::sleep(Duration::from_millis(50)).await;
     }
     assert!(success, "Expected pending status with future run_at");
-    ctx.cleanup().await;
 }
 
 #[tokio::test(flavor = "multi_thread")]
@@ -302,7 +295,6 @@ async fn test_reschedule_at_result() {
         success,
         "Expected pending status with attempt=0 and future run_at"
     );
-    ctx.cleanup().await;
 }
 
 #[tokio::test(flavor = "multi_thread")]
@@ -326,7 +318,6 @@ async fn test_unique_key_no_duplicate() {
             .await
             .unwrap();
     assert_eq!(count.0, 1);
-    ctx.cleanup().await;
 }
 
 #[tokio::test(flavor = "multi_thread")]
@@ -339,7 +330,6 @@ async fn test_missing_handler() {
         .unwrap();
     let result = wait_for_status(&ctx.pool, "unregistered-queue", "critical_failure", 5).await;
     assert_eq!(result.unwrap(), "critical_failure");
-    ctx.cleanup().await;
 }
 
 #[tokio::test(flavor = "multi_thread", worker_threads = 8)]
@@ -375,7 +365,6 @@ async fn test_max_attempts() {
         tokio::time::sleep(Duration::from_millis(100)).await;
     }
     assert!(success, "Expected failed status with attempt=5");
-    ctx.cleanup().await;
 }
 
 #[tokio::test(flavor = "multi_thread")]
@@ -399,7 +388,6 @@ async fn test_concurrent_processing() {
     )
     .await;
     assert_eq!(result.unwrap(), 20);
-    ctx.cleanup().await;
 }
 
 #[tokio::test(flavor = "multi_thread")]
@@ -420,7 +408,6 @@ async fn test_job_with_fingerprint() {
             .await
             .unwrap();
     assert_eq!(row.0, Some("fp-123".to_string()));
-    ctx.cleanup().await;
 }
 
 #[tokio::test(flavor = "multi_thread")]
@@ -434,7 +421,6 @@ async fn test_poison_job() {
         .await
         .unwrap();
 
-    tracing::info!("test");
     let deadline = std::time::Instant::now() + Duration::from_secs(5);
     let mut success = false;
     while std::time::Instant::now() < deadline {
@@ -460,7 +446,6 @@ async fn test_poison_job() {
         tokio::time::sleep(Duration::from_millis(100)).await;
     }
     assert!(success, "Expected failed status with attempt=5");
-    ctx.cleanup().await;
 }
 
 #[tokio::test(flavor = "multi_thread")]
@@ -548,6 +533,4 @@ async fn test_queue_isolation() {
     // At least some slow jobs should still be processing (not all completed due to semaphore limit)
     tracing::info!("unprocessed_slow_count: {}", unprocessed_slow_count.0);
     assert!(unprocessed_slow_count.0 > 200);
-
-    ctx.cleanup().await;
 }

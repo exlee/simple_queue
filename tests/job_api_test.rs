@@ -21,8 +21,6 @@ async fn test_insert_job() {
         .await
         .unwrap();
     assert_eq!(count, 1);
-
-    ctx.cleanup().await;
 }
 
 #[tokio::test]
@@ -43,8 +41,6 @@ async fn test_insert_job_with_unique_key() {
         .await
         .unwrap();
     assert_eq!(count, 1);
-
-    ctx.cleanup().await;
 }
 
 #[tokio::test]
@@ -71,8 +67,6 @@ async fn test_insert_job_duplicate_unique_key() {
         .await
         .unwrap();
     assert_eq!(count, 1);
-
-    ctx.cleanup().await;
 }
 
 #[tokio::test]
@@ -104,8 +98,6 @@ async fn test_insert_job_duplicate_unique_key_but_cancelled() {
         .await
         .unwrap();
     assert_eq!(count, 2);
-
-    ctx.cleanup().await;
 }
 
 #[tokio::test]
@@ -143,8 +135,6 @@ async fn test_cancel_job_by_unique_key() {
             .await
             .unwrap();
     assert_eq!(status, Some("cancelled".to_string()));
-
-    ctx.cleanup().await;
 }
 
 #[tokio::test]
@@ -188,8 +178,6 @@ async fn test_cancel_all_jobs_by_fingerprint() {
     .await
     .unwrap();
     assert_eq!(count, 2);
-
-    ctx.cleanup().await;
 }
 #[tokio::test]
 async fn test_insert_jobs() {
@@ -212,8 +200,6 @@ async fn test_insert_jobs() {
         .await
         .unwrap();
     assert_eq!(count, 2);
-
-    ctx.cleanup().await;
 }
 
 #[tokio::test]
@@ -236,6 +222,4 @@ async fn test_insert_jobs_conflicting() {
         .await
         .unwrap();
     assert_eq!(count, 0);
-
-    ctx.cleanup().await;
 }

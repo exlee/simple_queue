@@ -77,8 +77,6 @@ async fn test_archiver_moves_completed_job() {
         1,
         "completed job should appear in job_queue_archive"
     );
-
-    ctx.cleanup().await;
 }
 
 /// All completed jobs in one run are archived together.
@@ -108,8 +106,6 @@ async fn test_archiver_moves_multiple_completed_jobs() {
             "job {id} should be in job_queue_archive"
         );
     }
-
-    ctx.cleanup().await;
 }
 
 /// The archiver must not touch jobs whose status is not `completed`.
@@ -149,8 +145,6 @@ async fn test_archiver_ignores_non_completed_statuses() {
             "status={status}: job must NOT appear in job_queue_archive"
         );
     }
-
-    ctx.cleanup().await;
 }
 
 /// Archiver on an empty queue must succeed without errors.
@@ -164,8 +158,6 @@ async fn test_archiver_empty_queue_is_noop() {
         .run_archiver()
         .await
         .expect("run_archiver should not fail on empty queue");
-
-    ctx.cleanup().await;
 }
 
 // ---------------------------------------------------------------------------
@@ -202,8 +194,6 @@ async fn test_dlq_moves_all_terminal_statuses() {
             "status={status}: job should appear in job_queue_archive"
         );
     }
-
-    ctx.cleanup().await;
 }
 
 /// DLQ must not touch `running` or `completed` jobs; those belong to other paths.
@@ -235,8 +225,6 @@ async fn test_dlq_ignores_running_and_completed() {
             "status={status}: job must NOT appear in job_queue_archive"
         );
     }
-
-    ctx.cleanup().await;
 }
 
 /// DLQ on an empty queue must succeed without errors.
@@ -250,8 +238,6 @@ async fn test_dlq_empty_queue_is_noop() {
         .run_dlq()
         .await
         .expect("run_dlq should not fail on empty queue");
-
-    ctx.cleanup().await;
 }
 
 // ---------------------------------------------------------------------------
@@ -301,8 +287,6 @@ async fn test_archiver_and_dlq_do_not_overlap() {
         1,
         "cancelled job should be in job_queue_archive after dlq"
     );
-
-    ctx.cleanup().await;
 }
 
 /// Run both archiver and DLQ in sequence and verify all eligible jobs move
@@ -371,8 +355,6 @@ async fn test_full_janitor_cycle_moves_correct_jobs() {
             "status={status}: must NOT be in job_queue_archive"
         );
     }
-
-    ctx.cleanup().await;
 }
 
 // ---------------------------------------------------------------------------
@@ -480,8 +462,6 @@ async fn test_e2e_completed_job_is_archived() {
         0,
         "completed job must not remain in job_queue"
     );
-
-    ctx.cleanup().await;
 }
 
 /// Full round-trip: queue sets status to `cancelled`, DLQ sweeps it to archive.
@@ -515,8 +495,6 @@ async fn test_e2e_cancelled_job_is_archived_by_dlq() {
         0,
         "cancelled job must not remain in job_queue"
     );
-
-    ctx.cleanup().await;
 }
 
 /// Full round-trip: critical_failure status is swept by the DLQ.
@@ -550,8 +528,6 @@ async fn test_e2e_critical_job_is_archived_by_dlq() {
         0,
         "critical_failure job must not remain in job_queue"
     );
-
-    ctx.cleanup().await;
 }
 
 /// Full round-trip: unprocessable status is swept by the DLQ.
@@ -585,6 +561,4 @@ async fn test_e2e_unprocessable_job_is_archived_by_dlq() {
         0,
         "unprocessable job must not remain in job_queue"
     );
-
-    ctx.cleanup().await;
 }

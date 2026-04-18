@@ -116,11 +116,12 @@ async fn main() {
 
 ## Future Work
 
+- Migration off `sqlx` toward `diesel` (due to db-dependency shenanigans)
+- PG Listener (to decrease job-to-queue latency)
 - Distributed Semaphores using PostgreSQL
 - Temporary store on connection loss
 - Job templates
 - Queue interactor interface
-- PG Listener (to decrease job-to-queue latency)
 - Job Queue partitioning (dead tuples accumulation prevention)
 - Saga pattern support
 

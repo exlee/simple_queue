@@ -70,12 +70,34 @@ impl TestContext {
             schema,
         }
     }
+}
 
-    pub async fn cleanup(self) {
-        let _ = sqlx::raw_sql(&format!("DROP SCHEMA \"{}\" CASCADE", self.schema))
-            .execute(&self.admin_pool)
-            .await;
-        self.admin_pool.close().await;
+impl Drop for TestContext {
+    fn drop(&mut self) {
+        use tokio::runtime::*;
+        let schema = self.schema.clone();
+        let admin_pool = self.admin_pool.clone();
+
+        let cleanup = async move {
+            let _ = sqlx::raw_sql(&format!("DROP SCHEMA \"{}\" CASCADE", &schema))
+                .execute(&admin_pool)
+                .await;
+            admin_pool.close().await;
+        };
+
+        match Handle::try_current() {
+            Ok(handle) => match handle.runtime_flavor() {
+                RuntimeFlavor::MultiThread => {
+                    tokio::task::block_in_place(|| handle.block_on(cleanup));
+                }
+                _ => {
+                    handle.spawn(cleanup);
+                }
+            },
+            Err(_) => {
+                tokio::runtime::Runtime::new().unwrap().block_on(cleanup);
+            }
+        }
     }
 }
 
