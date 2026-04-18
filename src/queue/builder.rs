@@ -34,6 +34,12 @@ impl SimpleQueue {
             hold_queue_semaphore: tokio::time::Duration::from_millis(500),
         }
     }
+    /// Create a new `SimpleQueue` with a PostgreSQL pool created from a URL.
+    /// See [`SimpleQueue::new`] for default configuration details.
+    pub async fn new_from_url(url: &str) -> Result<Self, sqlx::Error> {
+        let pool = sqlx::PgPool::connect(url).await?;
+        Ok(Self::new(pool))
+    }
     /// Set the number of global semaphore permits
     ///
     /// Default value: `500`

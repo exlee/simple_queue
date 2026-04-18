@@ -122,6 +122,7 @@ async fn main() {
 - Queue interactor interface
 - PG Listener (to decrease job-to-queue latency)
 - Job Queue partitioning (dead tuples accumulation prevention)
+- Saga pattern support
 
 ## Decisions
 

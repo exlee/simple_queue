@@ -161,6 +161,7 @@ pub mod prelude {
     pub use crate::BoxDynError;
     pub use crate::handler::Handler;
     pub use crate::job::Job;
+    pub use crate::job::JobExt;
     pub use crate::queue::SimpleQueue;
     pub use crate::result::JobResult;
 }
@@ -174,6 +175,14 @@ pub use prelude::*;
 pub async fn setup(pool: &PgPool) -> Result<(), BoxDynError> {
     sqlx::raw_sql(include_str!("../migrations/0001_queue_init.sql"))
         .execute(pool)
+        .await?;
+    Ok(())
+}
+/// Sets up the queue schema in the database using a PostgreSQL URL.
+pub async fn setup_from_url(url: &str) -> Result<(), BoxDynError> {
+    let pool = sqlx::PgPool::connect(url).await?;
+    sqlx::raw_sql(include_str!("../migrations/0001_queue_init.sql"))
+        .execute(&pool)
         .await?;
     Ok(())
 }

@@ -102,3 +102,13 @@ impl Job {
         }
     }
 }
+
+pub trait JobExt<T> {
+    fn into_job(self, queue: &'static str) -> Job;
+}
+
+impl<T: serde::Serialize + serde::de::DeserializeOwned> JobExt<T> for T {
+    fn into_job(self, queue: &'static str) -> Job {
+        Job::new(queue, self)
+    }
+}
