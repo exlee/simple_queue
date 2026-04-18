@@ -1,5 +1,12 @@
 # Changelog
 
+## 0.1.4
+
+### Maintanance
+
+- SQLX prepare files
+- Include test files
+
 ## 0.1.3
 
 ### Added
