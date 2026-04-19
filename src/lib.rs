@@ -23,6 +23,7 @@ Default configurations for jobs and queues are.. defaults, so make sure to read 
 - Stalled job recovery (heartbeat)
 - Archive and DLQ (requires `janitor` feature)
 - Poison job detection (`reaper`)
+- Wait for job completion (requires `wait-for-job` feature; oneshot channel notified on first processing attempt, regardless of success or failure)
 
 ## Usage
 
@@ -123,6 +124,12 @@ async fn main() {
    │  └─────────────┘     │
    └──────────────────────┘
 ```
+
+## Features
+
+- `wait-for-job` — Enables `insert_job_and_wait` / `insert_jobs_and_wait` methods that return a oneshot receiver notified when the job is first processed (success or failure).
+- `janitor` — Enables a background janitor task that periodically archives completed jobs and moves failed jobs to a dead-letter queue. Enabled by default.
+
 ## Future Work
 
 - Distributed Semaphores using PostgreSQL

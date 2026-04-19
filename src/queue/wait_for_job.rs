@@ -49,6 +49,9 @@ impl super::SimpleQueue {
     /// Insert a single job into the queue and return a receiver that will be
     /// signaled when the job completes. If the insert was a no-op (e.g., due to
     /// a duplicate unique key), `Ok(None)` is returned.
+    ///
+    /// **Note:** The channel returns on the first processing attempt, regardless
+    /// of whether the job succeeds or fails.
     pub async fn insert_job_and_wait(
         &self,
         job: Job,
@@ -64,6 +67,9 @@ impl super::SimpleQueue {
     }
     /// Insert multiple jobs into the queue and return a receiver for each job
     /// that will be signaled when the corresponding job completes.
+    ///
+    /// **Note:** Each channel returns on the first processing attempt, regardless
+    /// of whether the job succeeds or fails.
     pub async fn insert_jobs_and_wait(
         &self,
         jobs: Vec<Job>,
