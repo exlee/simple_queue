@@ -16,8 +16,9 @@ name = "test_run"
 doc-scrape-examples = false
 
 [features]
-default = ["janitor"]
+default = ["janitor", "wait-for-job"]
 janitor = []
+wait-for-job = []
 
 [package.metadata.docs.rs]
 all-features = true

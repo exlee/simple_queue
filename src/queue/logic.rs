@@ -6,6 +6,8 @@ use tracing::Instrument as _;
 
 use crate::heartbeat;
 use crate::prelude::*;
+#[cfg(feature = "wait-for-job")]
+use crate::queue::wait_for_job::get_waiting_guard;
 use crate::result::{self, AnyJobResult, JobResultInternal};
 use crate::sync::{self, BackoffStrategy, JobStrategyError};
 
@@ -64,6 +66,8 @@ impl SimpleQueue {
             let job = self.fetch_next_job().await?;
             if let Some(job) = job {
                 let _job_span = tracing::info_span!("job", id = %job.id, queue = %job.queue);
+                #[cfg(feature = "wait-for-job")]
+                let _wait_guard = get_waiting_guard(job.id);
                 let _heartbeat = heartbeat::Heartbeat::start(
                     self.pool.clone(),
                     &job.id,
@@ -90,57 +94,56 @@ impl SimpleQueue {
                     continue;
                 };
                 let q = Arc::clone(&self);
-
+                let job = Arc::new(job);
                 tokio::spawn(async move {
-                    let job = Arc::new(job);
-                    tokio::spawn(async move {
-                        if job.reprocess_count >= q.max_reprocess_count as i32 {
-                            handle_result(
-                                AnyJobResult::Internal(JobResultInternal::BadJob),
-                                &job,
-                                &q.pool,
-                                &q.get_backoff_strategy(&job),
-                            ).await;
-                            return;
-                        }
-                        let permit_result = q.get_job_strategy(&job).acquire(&job).await;
-                        let backoff_strategy = q.get_backoff_strategy(&job);
+                    if job.reprocess_count >= q.max_reprocess_count as i32 {
+                        handle_result(
+                            AnyJobResult::Internal(JobResultInternal::BadJob),
+                            &job,
+                            &q.pool,
+                            &q.get_backoff_strategy(&job),
+                        ).await;
+                        return;
+                    }
+                    let permit_result = q.get_job_strategy(&job).acquire(&job).await;
+                    let backoff_strategy = q.get_backoff_strategy(&job);
 
-                        if let Err(permit_err) = permit_result {
-                            handle_strategy_error(permit_err, &job, &q.pool, &backoff_strategy).await;
-                            return;
-                        };
-                        let _permit = permit_result.unwrap();
-                        let q_name: String = job.queue.clone();
-                        let result = if let Some(handler) = q.job_registry.get(q_name.as_str()) {
+                    if let Err(permit_err) = permit_result {
+                        handle_strategy_error(permit_err, &job, &q.pool, &backoff_strategy).await;
+                        return;
+                    };
+                    let _permit = permit_result.unwrap();
+                    let q_name: String = job.queue.clone();
+                    let result = if let Some(handler) = q.job_registry.get(q_name.as_str()) {
 
-                            let wrapped_result = AssertUnwindSafe(
-                                handler.process_dyn(&q, &job)
-                                    .instrument(tracing::info_span!("process_job", job_id = %&job.id, queue = %&job.queue, attempt = %&job.attempt, max_attempts = %&job.max_attempts, run_at = ?&job.run_at)))
-                            .catch_unwind().await;
+                        let wrapped_result = AssertUnwindSafe(
+                            handler.process_dyn(&q, &job)
+                                .instrument(tracing::info_span!("process_job", job_id = %&job.id, queue = %&job.queue, attempt = %&job.attempt, max_attempts = %&job.max_attempts, run_at = ?&job.run_at)))
+                        .catch_unwind().await;
 
-                            match wrapped_result {
-                                Ok(Ok(process)) => process,
-                                Ok(Err(e)) => {
-                                    tracing::error!("Handler returned error: {:?}", e);
-                                    JobResult::InternalError
-                                }
-                                Err(_) => {
-                                    tracing::error!("Handler panicked or returned error: {}", &job.id);
-                                    JobResult::InternalError
-                                }
+                        match wrapped_result {
+                            Ok(Ok(process)) => process,
+                            Ok(Err(e)) => {
+                                tracing::error!("Handler returned error: {:?}", e);
+                                JobResult::InternalError
                             }
-                        } else {
-                            tracing::warn!("Missing handler for: {:?}", (job.queue).clone().as_str());
-                            JobResult::HandlerMissing
-                        };
+                            Err(_) => {
+                                tracing::error!("Handler panicked or returned error: {}", &job.id);
+                                JobResult::InternalError
+                            }
+                        }
+                    } else {
+                        tracing::warn!("Missing handler for: {:?}", (job.queue).clone().as_str());
+                        JobResult::HandlerMissing
+                    };
 
-                        handle_result(AnyJobResult::Public(result), &job, &q.pool, &backoff_strategy).await;
-                        drop(_permit);
-                        drop(_queue_permit);
-                        drop(_global_permit);
-                        drop(_heartbeat);
-                    });
+                    handle_result(AnyJobResult::Public(result), &job, &q.pool, &backoff_strategy).await;
+                    drop(_permit);
+                    drop(_queue_permit);
+                    drop(_global_permit);
+                    drop(_heartbeat);
+                    #[cfg(feature = "wait-for-job")]
+                    drop(_wait_guard);
                 }.instrument(_job_span));
             } else {
                 tokio::time::sleep(self.empty_poll_sleep).await;

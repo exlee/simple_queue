@@ -4,6 +4,8 @@ mod builder;
 mod handler_api;
 mod job_api;
 mod logic;
+#[cfg(feature = "wait-for-job")]
+mod wait_for_job;
 mod workers_api;
 
 use crate::handler;
