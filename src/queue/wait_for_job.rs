@@ -18,12 +18,6 @@ pub fn wait_for_job(id: uuid::Uuid) -> tokio::sync::oneshot::Receiver<()> {
     rx
 }
 
-pub fn job_done(id: uuid::Uuid) {
-    let dm = get_waiting_channels();
-    if let Some((_id, ch)) = dm.remove(&id) {
-        let _ = ch.send(());
-    }
-}
 pub struct Guard(Option<tokio::sync::oneshot::Sender<()>>);
 pub fn get_waiting_guard(id: uuid::Uuid) -> Option<Guard> {
     let dm = get_waiting_channels();
