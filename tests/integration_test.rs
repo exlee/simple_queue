@@ -9,6 +9,9 @@ struct SuccessHandler;
 impl Handler for SuccessHandler {
     const QUEUE: &'static str = "test-success";
     async fn process(&self, _queue: &SimpleQueue, _job: &Job) -> Result<JobResult, BoxDynError> {
+        // Needed, because otherwise queue might process job too fast causing flaky test
+        // (e.g. unique is on runing and pending, and queue can process before next insertion happens)
+        tokio::time::sleep(tokio::time::Duration::from_millis(50)).await;
         Ok(JobResult::Success)
     }
 }

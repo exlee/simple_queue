@@ -38,7 +38,6 @@ pub struct TestContext {
     pub admin_pool: PgPool,
     pub schema: String,
 }
-
 impl TestContext {
     pub async fn new() -> Self {
         init_tracing();
