@@ -1,0 +1,16 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "\n        INSERT INTO job_queue (id, queue, job_data, status, attempt, max_attempts)\n        VALUES ($1, $2, '{}', $3, 0, 3)\n        ",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Uuid",
+        "Varchar",
+        "Varchar"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "073dc1d0da60c7b3a97d26a56055008aee63dea66189b1b3276fdf60d7f3e19d"
+}

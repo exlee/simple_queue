@@ -9,7 +9,7 @@ categories = ["concurrency", "asynchronous"]
 repository = "https://github.com/exlee/simple_queue"
 rust-version = "1.88.0"
 readme = "README.md"
-include = ["src/**/*", "migrations/*", "tests/**/*", "README.md", "CHANGELOG.md"]
+include = ["src/**/*", "migrations/*", "tests/**/*", ".sqlx/*", "README.md", "CHANGELOG.md"]
 
 [[example]]
 name = "test_run"

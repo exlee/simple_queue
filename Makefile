@@ -27,7 +27,7 @@ __check_tests_all_features:
 	@touch $@
 
 __sqlx_prepare:
-	cargo sqlx prepare
+	cargo sqlx prepare -- --all-targets
 	@touch $@
 
 __check_audit:
