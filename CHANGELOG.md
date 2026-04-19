@@ -1,5 +1,12 @@
 # Changelog
 
+## 0.2.1, 0.2.2
+
+### Maintenance
+
+- Set SQLX_OFFLINE=true in build.rs in hopes to have docs.rs build go through
+- Makefile has `--all-features` for `sqlx prepare` so that tests are picked up too
+
 ## 0.2.0
 
 ### Added

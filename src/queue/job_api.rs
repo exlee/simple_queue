@@ -6,7 +6,7 @@ impl SimpleQueue {
     /// Insert a job into the queue. If a job with the same unique key already exists,
     /// and it is still pending or running, the insert will be a no-op.
     pub async fn insert_job(&self, job: Job) -> Result<Option<uuid::Uuid>, BoxDynError> {
-        let id = sqlx::query_scalar!(
+        let id: Option<uuid::Uuid> = sqlx::query_scalar!(
         r#"
         INSERT INTO job_queue (
         id, fingerprint, unique_key, queue, job_data, status, created_at, run_at, updated_at, attempt, max_attempts
