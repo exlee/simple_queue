@@ -53,10 +53,10 @@ impl SimpleQueue {
     ///
     /// Default value if not set is `default_queue_strategy` parameter.
     pub fn with_queue_strategy(
-        self,
+        &self,
         queue: String,
         strategy: impl sync::JobStrategy + 'static,
-    ) -> Self {
+    ) -> &Self {
         self.queue_strategies
             .insert(queue.clone(), Arc::new(strategy));
         self
@@ -64,7 +64,7 @@ impl SimpleQueue {
     /// Set the number of semaphore permits for a specific queue
     ///
     /// Default value if not set is in `queue_sem_count` parameter set by `with_queue_default_semaphore_size`.
-    pub fn with_queue_semaphore(self, queue: String, permits: usize) -> Self {
+    pub fn with_queue_semaphore(&self, queue: String, permits: usize) -> &Self {
         self.queue_semaphores
             .insert(queue, Arc::new(Semaphore::new(permits)));
         self
@@ -112,7 +112,7 @@ impl SimpleQueue {
     /// See also [`BackoffStrategy`].
     ///
     /// Default is taken from `default_backoff_strategy`.
-    pub fn with_queue_backoff_strategy(self, queue: String, strategy: BackoffStrategy) -> Self {
+    pub fn with_queue_backoff_strategy(&self, queue: String, strategy: BackoffStrategy) -> &Self {
         self.queue_backoff_strategies.insert(queue, strategy);
         self
     }
