@@ -1,5 +1,11 @@
 # Changelog
 
+## Unreleased
+
+### Changed
+
+- Queue-specific configuration builders (`with_queue_semaphore`, `with_queue_strategy`, `with_queue_backoff_strategy`) can me used and modified on references (direct or Arc)
+
 ## 0.2.1, 0.2.2
 
 ### Maintenance

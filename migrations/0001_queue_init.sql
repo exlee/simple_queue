@@ -10,6 +10,7 @@ CREATE TABLE IF NOT EXISTS job_queue
     created_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP,
     run_at TIMESTAMPTZ,
     updated_at TIMESTAMPTZ,
+    completed_at TIMESTAMPTZ,                                    -- v2
     attempt INT NOT NULL DEFAULT 0,
     max_attempts INT NOT NULL DEFAULT 3,
     reprocess_count INT NOT NULL DEFAULT 0
