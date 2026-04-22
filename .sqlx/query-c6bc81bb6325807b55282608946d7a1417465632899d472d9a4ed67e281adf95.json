@@ -1,6 +1,6 @@
 {
   "db_name": "PostgreSQL",
-  "query": "\n        UPDATE job_queue\n        SET\n            status = $2,\n            attempt = attempt + 1\n\n        WHERE id = (\n            SELECT id FROM job_queue\n            WHERE status = $1\n            AND (CURRENT_TIMESTAMP > run_at OR run_at IS NULL)\n            AND attempt < max_attempts\n            FOR UPDATE SKIP LOCKED\n            LIMIT 1\n        )\n        RETURNING *\n        ",
+  "query": "\n        UPDATE job_queue\n        SET\n            status = $2,\n            attempt = attempt + 1\n\n        WHERE id = (\n            SELECT id FROM job_queue\n            WHERE status = $1\n            AND (NOW() > run_at OR run_at IS NULL)\n            AND attempt < max_attempts\n            FOR UPDATE SKIP LOCKED\n            LIMIT 1\n        )\n        RETURNING *\n        ",
   "describe": {
     "columns": [
       {
@@ -91,5 +91,5 @@
       true
     ]
   },
-  "hash": "3615ddb67036527b2ca3639180342b5782370b9ecd16341a55f0d59fca705cfe"
+  "hash": "c6bc81bb6325807b55282608946d7a1417465632899d472d9a4ed67e281adf95"
 }

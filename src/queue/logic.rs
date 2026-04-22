@@ -11,6 +11,7 @@ use crate::queue::wait_for_job::get_waiting_guard;
 use crate::result::{self, AnyJobResult, JobResultInternal};
 use crate::sync::{self, BackoffStrategy, JobStrategyError};
 
+use std::error::Error as _;
 use std::panic::AssertUnwindSafe;
 use std::sync::Arc;
 // Logic implementation
@@ -28,7 +29,7 @@ impl SimpleQueue {
         WHERE id = (
             SELECT id FROM job_queue
             WHERE status = $1
-            AND (CURRENT_TIMESTAMP > run_at OR run_at IS NULL)
+            AND (NOW() > run_at OR run_at IS NULL)
             AND attempt < max_attempts
             FOR UPDATE SKIP LOCKED
             LIMIT 1
@@ -59,11 +60,16 @@ impl SimpleQueue {
         start_permit: Option<tokio::sync::OwnedSemaphorePermit>,
     ) -> Result<(), BoxDynError> {
         drop(start_permit);
+        tracing::info!("starting job loop");
         loop {
             let _span = tracing::info_span!("poll");
 
             let _global_permit = self.global_semaphore.clone().acquire_owned().await?;
-            let job = self.fetch_next_job().await?;
+            let job = self
+                .fetch_next_job()
+                .await
+                .inspect_err(|e| tracing::error!("Polling error: {}", e))?;
+            tracing::info!("got job");
             if let Some(job) = job {
                 let _job_span = tracing::info_span!("job", id = %job.id, queue = %job.queue);
                 #[cfg(feature = "wait-for-job")]
@@ -259,14 +265,23 @@ async fn handle_result_public(
             .await;
         }
         JobResult::Success => {
-            let _ = sqlx::query!(
-                "UPDATE job_queue SET status = $1, completed_at = CURRENT_TIMESTAMP WHERE id = $2",
+            let result = sqlx::query!(
+                "UPDATE job_queue SET status = $1, completed_at = NOW() WHERE id = $2",
                 next_status_str,
                 job.id.clone(),
             )
             .execute(pool)
             .await;
-            tracing::info!("[{}] Job {} succeeded", job.queue, job.id);
+            if result.is_err() {
+                tracing::error!(
+                    "[{}] Job {} insertion failed: {}",
+                    job.queue,
+                    job.id,
+                    result.unwrap_err()
+                );
+            } else {
+                tracing::info!("[{}] Job {} succeeded", job.queue, job.id);
+            }
         }
         JobResult::Failed => {
             // TODO: Add RetryAt
@@ -323,7 +338,7 @@ async fn update_job(
     result: result::JobResultInternal,
 ) -> Result<(), sqlx::Error> {
     sqlx::query!(
-        "UPDATE job_queue SET status = $1, completed_at = CURRENT_TIMESTAMP WHERE id = $2",
+        "UPDATE job_queue SET status = $1, completed_at = NOW() WHERE id = $2",
         result.to_string(),
         id
     )

@@ -427,18 +427,23 @@ async fn test_poison_job() {
     let deadline = std::time::Instant::now() + Duration::from_secs(5);
     let mut success = false;
     while std::time::Instant::now() < deadline {
-        let result: Result<(String, i32, chrono::DateTime<chrono::Utc>, i32), _> = sqlx::query_as(
-            "SELECT status, attempt, run_at, reprocess_count FROM job_queue WHERE queue = $1",
-        )
-        .bind(queue_name)
-        .fetch_one(&ctx.pool)
-        .await;
+        let result: Result<(String, i32, Option<chrono::DateTime<chrono::Utc>>, i32), _> =
+            sqlx::query_as(
+                "SELECT status, attempt, run_at, reprocess_count FROM job_queue WHERE queue = $1",
+            )
+            .bind(queue_name)
+            .fetch_one(&ctx.pool)
+            .await;
         if let Ok((status, attempt, run_at, reprocess_count)) = result {
+            let ra = run_at
+                .map(|d| d.to_string())
+                .unwrap_or(String::from("None"));
+
             tracing::info!(
                 "status: {}, attempt: {}, run_at: {}, reprocess_count: {}",
                 status,
                 attempt,
-                run_at,
+                ra,
                 reprocess_count
             );
             if status == "bad_job" {

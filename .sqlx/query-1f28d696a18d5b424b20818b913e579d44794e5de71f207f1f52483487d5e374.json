@@ -1,0 +1,26 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "\n            WITH moved AS (\n              DELETE FROM job_queue\n              WHERE status IN ($1, $2, $3, $4)\n              OR status = $5 and attempt >= max_attempts\n              RETURNING *\n            )\n            INSERT INTO job_queue_dlq SELECT * FROM moved\n            RETURNING id;\n            ",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "id",
+        "type_info": "Uuid"
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Varchar",
+        "Varchar",
+        "Varchar",
+        "Varchar",
+        "Text"
+      ]
+    },
+    "nullable": [
+      false
+    ]
+  },
+  "hash": "1f28d696a18d5b424b20818b913e579d44794e5de71f207f1f52483487d5e374"
+}
