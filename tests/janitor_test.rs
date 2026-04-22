@@ -421,9 +421,7 @@ async fn wait_for_table(
         }
         tokio::time::sleep(Duration::from_millis(50)).await;
     }
-    Err(format!(
-        "Timeout waiting for job {id} to appear in {table}"
-    ))
+    Err(format!("Timeout waiting for job {id} to appear in {table}"))
 }
 
 /// Wait until the job_queue row for `id` disappears.

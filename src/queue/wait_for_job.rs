@@ -8,7 +8,7 @@ static WAITING_CHANNELS: OnceLock<DashMap<uuid::Uuid, tokio::sync::oneshot::Send
     OnceLock::new();
 
 fn get_waiting_channels() -> &'static DashMap<uuid::Uuid, tokio::sync::oneshot::Sender<()>> {
-    WAITING_CHANNELS.get_or_init(|| DashMap::new())
+    WAITING_CHANNELS.get_or_init(DashMap::new)
 }
 
 /// Register a oneshot channel for the given job ID and return the receiver.

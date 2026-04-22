@@ -272,12 +272,7 @@ async fn handle_result_public(
             .execute(pool)
             .await;
             if let Err(err) = result {
-                tracing::error!(
-                    "[{}] Job {} insertion failed: {}",
-                    job.queue,
-                    job.id,
-                    err
-                );
+                tracing::error!("[{}] Job {} insertion failed: {}", job.queue, job.id, err);
             } else {
                 tracing::info!("[{}] Job {} succeeded", job.queue, job.id);
             }
