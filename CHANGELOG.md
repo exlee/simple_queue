@@ -14,6 +14,7 @@
 - Queue-specific configuration builders (`with_queue_semaphore`, `with_queue_strategy`, `with_queue_backoff_strategy`) can be used and modified on references (direct or Arc)
 - Reaper now sets `completed_at` when marking jobs as permanently failed
 - Job completion now sets `completed_at` timestamp
+- Janitor now moves dead jobs (unprocessable, cancelled, critical, bad job) to DLQ instead of archive, and moves failed jobs that have reached max attempts to DLQ
 
 ## 0.2.1, 0.2.2
 
