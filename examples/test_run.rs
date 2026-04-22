@@ -90,7 +90,7 @@ pub async fn main() {
     for handle in producer_handles {
         handle.abort();
     }
-    tokio::time::sleep(tokio::time::Duration::from_millis(500));
+    tokio::time::sleep(tokio::time::Duration::from_millis(500)).await;
     queue_handle.abort_all();
 
     println!("Done");

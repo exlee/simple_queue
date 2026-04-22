@@ -11,7 +11,6 @@ use crate::queue::wait_for_job::get_waiting_guard;
 use crate::result::{self, AnyJobResult, JobResultInternal};
 use crate::sync::{self, BackoffStrategy, JobStrategyError};
 
-use std::error::Error as _;
 use std::panic::AssertUnwindSafe;
 use std::sync::Arc;
 // Logic implementation
@@ -272,12 +271,12 @@ async fn handle_result_public(
             )
             .execute(pool)
             .await;
-            if result.is_err() {
+            if let Err(err) = result {
                 tracing::error!(
                     "[{}] Job {} insertion failed: {}",
                     job.queue,
                     job.id,
-                    result.unwrap_err()
+                    err
                 );
             } else {
                 tracing::info!("[{}] Job {} succeeded", job.queue, job.id);

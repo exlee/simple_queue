@@ -108,10 +108,10 @@ async fn wait_for_status(
         ))
         .fetch_one(pool)
         .await;
-        if let Ok((status,)) = result {
-            if status == expected {
-                return Ok(status);
-            }
+        if let Ok((status,)) = result
+            && status == expected
+        {
+            return Ok(status);
         }
         tokio::time::sleep(Duration::from_millis(50)).await;
     }
@@ -130,10 +130,10 @@ async fn wait_for_count(
     let deadline = std::time::Instant::now() + Duration::from_secs(timeout_secs);
     while std::time::Instant::now() < deadline {
         let result: Result<(i64,), _> = sqlx::query_as(query).fetch_one(pool).await;
-        if let Ok((count,)) = result {
-            if count == expected {
-                return Ok(count);
-            }
+        if let Ok((count,)) = result
+            && count == expected
+        {
+            return Ok(count);
         }
         tokio::time::sleep(Duration::from_millis(50)).await;
     }
@@ -256,11 +256,13 @@ async fn test_retry_at_result() {
             sqlx::query_as("SELECT status, run_at FROM job_queue WHERE queue = 'test-retry-at'")
                 .fetch_one(&ctx.pool)
                 .await;
-        if let Ok((status, run_at)) = result {
-            if status == "pending" && run_at.is_some() && run_at.unwrap() > chrono::Utc::now() {
-                success = true;
-                break;
-            }
+        if let Ok((status, run_at)) = result
+            && status == "pending"
+            && run_at.is_some()
+            && run_at.unwrap() > chrono::Utc::now()
+        {
+            success = true;
+            break;
         }
         tokio::time::sleep(Duration::from_millis(50)).await;
     }
@@ -286,11 +288,13 @@ async fn test_reschedule_at_result() {
             )
             .fetch_one(&ctx.pool)
             .await;
-        if let Ok((status, attempt, run_at)) = result {
-            if status == "pending" && attempt == 0 && run_at.is_some() {
-                success = true;
-                break;
-            }
+        if let Ok((status, attempt, run_at)) = result
+            && status == "pending"
+            && attempt == 0
+            && run_at.is_some()
+        {
+            success = true;
+            break;
         }
         tokio::time::sleep(Duration::from_millis(50)).await;
     }
