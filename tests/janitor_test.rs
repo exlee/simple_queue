@@ -189,9 +189,9 @@ async fn test_dlq_moves_all_terminal_statuses() {
             "status={status}: job should be removed from job_queue"
         );
         assert_eq!(
-            count_in(&ctx.pool, "job_queue_archive", *id).await,
+            count_in(&ctx.pool, "job_queue_dlq", *id).await,
             1,
-            "status={status}: job should appear in job_queue_archive"
+            "status={status}: job should appear in job_queue_dlq"
         );
     }
 }
@@ -283,9 +283,9 @@ async fn test_archiver_and_dlq_do_not_overlap() {
         "cancelled job should be removed from job_queue after dlq"
     );
     assert_eq!(
-        count_in(&ctx.pool, "job_queue_archive", cancelled_id).await,
+        count_in(&ctx.pool, "job_queue_dlq", cancelled_id).await,
         1,
-        "cancelled job should be in job_queue_archive after dlq"
+        "cancelled job should be in job_queue_dlq after dlq"
     );
 }
 
@@ -296,12 +296,14 @@ async fn test_full_janitor_cycle_moves_correct_jobs() {
     let ctx = TestContext::new().await;
     let queue = spawn_queue_no_janitor(&ctx.pool).await;
 
-    // Jobs that should be archived
-    let to_archive = [
-        (
-            "completed",
-            insert_job_with_status(&ctx.pool, "janitor-full", "completed").await,
-        ),
+    // Jobs that should be archived by run_archiver
+    let to_archive = [(
+        "completed",
+        insert_job_with_status(&ctx.pool, "janitor-full", "completed").await,
+    )];
+
+    // Jobs that should be moved to DLQ by run_dlq
+    let to_dlq = [
         (
             "cancelled",
             insert_job_with_status(&ctx.pool, "janitor-full", "cancelled").await,
@@ -340,6 +342,19 @@ async fn test_full_janitor_cycle_moves_correct_jobs() {
             count_in(&ctx.pool, "job_queue_archive", *id).await,
             1,
             "status={status}: should be in job_queue_archive"
+        );
+    }
+
+    for (status, id) in &to_dlq {
+        assert_eq!(
+            count_in(&ctx.pool, "job_queue", *id).await,
+            0,
+            "status={status}: should be gone from job_queue"
+        );
+        assert_eq!(
+            count_in(&ctx.pool, "job_queue_dlq", *id).await,
+            1,
+            "status={status}: should be in job_queue_dlq"
         );
     }
 
@@ -392,21 +407,22 @@ impl Handler for UnprocessableHandler {
         Ok(JobResult::Unprocessable)
     }
 }
-/// Wait until a job lands in job_queue_archive (i.e. after janitor sweeps it).
-async fn wait_for_archive(
+/// Wait until a job lands in the given table (i.e. after janitor sweeps it).
+async fn wait_for_table(
     pool: &sqlx::PgPool,
     id: uuid::Uuid,
     timeout_secs: u64,
+    table: &str,
 ) -> Result<(), String> {
     let deadline = std::time::Instant::now() + Duration::from_secs(timeout_secs);
     while std::time::Instant::now() < deadline {
-        if count_in(pool, "job_queue_archive", id).await == 1 {
+        if count_in(pool, table, id).await == 1 {
             return Ok(());
         }
         tokio::time::sleep(Duration::from_millis(50)).await;
     }
     Err(format!(
-        "Timeout waiting for job {id} to appear in job_queue_archive"
+        "Timeout waiting for job {id} to appear in {table}"
     ))
 }
 
@@ -453,7 +469,7 @@ async fn test_e2e_completed_job_is_archived() {
     let id = job.id;
     queue.insert_job(job).await.unwrap();
 
-    wait_for_archive(&ctx.pool, id, 10)
+    wait_for_table(&ctx.pool, id, 10, "job_queue_archive")
         .await
         .expect("completed job should reach job_queue_archive");
 
@@ -486,9 +502,9 @@ async fn test_e2e_cancelled_job_is_archived_by_dlq() {
     let id = job.id;
     queue.insert_job(job).await.unwrap();
 
-    wait_for_archive(&ctx.pool, id, 10)
+    wait_for_table(&ctx.pool, id, 10, "job_queue_dlq")
         .await
-        .expect("cancelled job should reach job_queue_archive via DLQ");
+        .expect("cancelled job should reach job_queue_dlq via DLQ");
 
     assert_eq!(
         count_in(&ctx.pool, "job_queue", id).await,
@@ -519,9 +535,9 @@ async fn test_e2e_critical_job_is_archived_by_dlq() {
     let id = job.id;
     queue.insert_job(job).await.unwrap();
 
-    wait_for_archive(&ctx.pool, id, 10)
+    wait_for_table(&ctx.pool, id, 10, "job_queue_dlq")
         .await
-        .expect("critical_failure job should reach job_queue_archive via DLQ");
+        .expect("critical_failure job should reach job_queue_dlq via DLQ");
 
     assert_eq!(
         count_in(&ctx.pool, "job_queue", id).await,
@@ -552,9 +568,9 @@ async fn test_e2e_unprocessable_job_is_archived_by_dlq() {
     let id = job.id;
     queue.insert_job(job).await.unwrap();
 
-    wait_for_archive(&ctx.pool, id, 10)
+    wait_for_table(&ctx.pool, id, 10, "job_queue_dlq")
         .await
-        .expect("unprocessable job should reach job_queue_archive via DLQ");
+        .expect("unprocessable job should reach job_queue_dlq via DLQ");
 
     assert_eq!(
         count_in(&ctx.pool, "job_queue", id).await,
