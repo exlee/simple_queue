@@ -53,15 +53,17 @@ impl Janitor {
             WITH moved AS (
               DELETE FROM job_queue
               WHERE status IN ($1, $2, $3, $4)
+              OR status = $5 and attempt >= max_attempts
               RETURNING *
             )
-            INSERT INTO job_queue_archive SELECT * FROM moved
+            INSERT INTO job_queue_dlq SELECT * FROM moved
             RETURNING id;
             "#,
             Unprocessable.to_string(),
             Cancelled.to_string(),
             Critical.to_string(),
             BadJob.to_string(),
+            Failed.to_string(),
         )
         .fetch_all(&self.pool)
         .await?;
