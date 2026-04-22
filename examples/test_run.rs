@@ -16,6 +16,9 @@ impl Handler for ProducerHandler {
             self.producer_id, job.id, data
         );
         // Simulate some work
+        if job.id.to_string().contains("abc") {
+            return Ok(JobResult::Failed);
+        }
         tokio::time::sleep(tokio::time::Duration::from_millis(50)).await;
         Ok(JobResult::Success)
     }
@@ -32,6 +35,9 @@ pub async fn main() {
 
     let queue = Arc::new(
         SimpleQueue::new(pool.clone())
+            .with_queue_default_semaphore_size(150)
+            .with_global_semaphore(250)
+            .with_janitor_interval(tokio::time::Duration::from_millis(7500))
             .with_heartbeat_interval(tokio::time::Duration::from_millis(100)),
     );
 
@@ -39,13 +45,14 @@ pub async fn main() {
     let handler = ProducerHandler { producer_id: 0 };
     queue.register_handler(handler);
 
-    // Spawn the queue processor
-    let queue_handle = tokio::spawn({
-        let q = queue.clone();
-        async move {
-            q.run(None).await.unwrap();
-        }
-    });
+    let mut queue_handle = simple_queue::start_with_janitor(queue.clone()).await;
+    // // Spawn the queue processor
+    // let queue_handle = tokio::spawn({
+    //     let q = queue.clone();
+    //     async move {
+    //         q.run(None).await.unwrap();
+    //     }
+    // });
 
     // Spawn 10 producer tasks that continuously insert jobs
     let mut producer_handles = Vec::new();
@@ -69,7 +76,7 @@ pub async fn main() {
                 }
                 count += 1;
                 // Small random-ish delay to create natural dynamics
-                tokio::time::sleep(tokio::time::Duration::from_millis(10)).await;
+                tokio::time::sleep(tokio::time::Duration::from_millis(80)).await;
             }
         });
         producer_handles.push(handle);
@@ -83,7 +90,8 @@ pub async fn main() {
     for handle in producer_handles {
         handle.abort();
     }
-    queue_handle.abort();
+    tokio::time::sleep(tokio::time::Duration::from_millis(500));
+    queue_handle.abort_all();
 
     println!("Done");
 }

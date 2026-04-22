@@ -54,7 +54,10 @@ impl Reaper {
         let ids: Vec<uuid::Uuid> = sqlx::query_scalar!(
             r#"
             UPDATE job_queue
-            SET status = $1, updated_at = CURRENT_TIMESTAMP
+            SET
+                status = $1,
+                updated_at = CURRENT_TIMESTAMP,
+                completed_at = CURRENT_TIMESTAMP
             WHERE status = $2
             AND attempt >= max_attempts
             RETURNING id

@@ -62,6 +62,11 @@
         "ordinal": 11,
         "name": "reprocess_count",
         "type_info": "Int4"
+      },
+      {
+        "ordinal": 12,
+        "name": "completed_at",
+        "type_info": "Timestamptz"
       }
     ],
     "parameters": {
@@ -82,7 +87,8 @@
       true,
       false,
       false,
-      false
+      false,
+      true
     ]
   },
   "hash": "3615ddb67036527b2ca3639180342b5782370b9ecd16341a55f0d59fca705cfe"

@@ -260,7 +260,7 @@ async fn handle_result_public(
         }
         JobResult::Success => {
             let _ = sqlx::query!(
-                "UPDATE job_queue SET status = $1 WHERE id = $2",
+                "UPDATE job_queue SET status = $1, completed_at = CURRENT_TIMESTAMP WHERE id = $2",
                 next_status_str,
                 job.id.clone(),
             )
@@ -316,14 +316,14 @@ async fn handle_result_public(
         }
     }
 }
-/// Helper: updates a job's status in the database.
+/// Helper: updates a job's status in the database - sets completed_At
 async fn update_job(
     pool: &PgPool,
     id: &uuid::Uuid,
     result: result::JobResultInternal,
 ) -> Result<(), sqlx::Error> {
     sqlx::query!(
-        "UPDATE job_queue SET status = $1 WHERE id = $2",
+        "UPDATE job_queue SET status = $1, completed_at = CURRENT_TIMESTAMP WHERE id = $2",
         result.to_string(),
         id
     )

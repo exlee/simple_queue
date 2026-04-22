@@ -22,6 +22,8 @@ pub struct Job {
     pub run_at: Option<chrono::DateTime<chrono::Utc>>,
     /// Timestamp when the job was last updated (for use by heartbeat)
     pub updated_at: Option<chrono::DateTime<chrono::Utc>>,
+    /// Timestamp when the job was completed
+    pub completed_at: Option<chrono::DateTime<chrono::Utc>>,
     /// Attempt count of the job
     pub attempt: i32,
     /// Maximum number of attempts for the job
@@ -54,6 +56,7 @@ impl Default for Job {
             created_at: chrono::Utc::now(),
             run_at: None,
             updated_at: None,
+            completed_at: None,
             attempt: 0,
             max_attempts: 3,
             reprocess_count: 0,
